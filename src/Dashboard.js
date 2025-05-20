@@ -16,8 +16,36 @@ const initialData = [
 ];
 
 const Dashboard = () => {
+  const [authorized, setAuthorized] = useState(false);  
+  const [codeInput, setCodeInput] = useState("");       
+  const INVITE_CODE = "1127";                           
   const [data, setData] = useState(initialData);
   const [viewType, setViewType] = useState("pie");
+  
+  if (!authorized) {
+  return (
+    <div style={{ padding: "100px", textAlign: "center" }}>
+      <h2>🔐 Enter Invite Code to Access</h2>
+      <input
+        type="text"
+        placeholder="Enter code"
+        value={codeInput}
+        onChange={(e) => setCodeInput(e.target.value)}
+        style={{ padding: "10px", fontSize: "16px" }}
+      />
+      <br /><br />
+      <button
+        onClick={() => {
+          if (codeInput === INVITE_CODE) setAuthorized(true);
+          else alert("❌ Invalid code");
+        }}
+        style={{ padding: "10px 20px", fontSize: "16px" }}
+      >
+        Access
+      </button>
+    </div>
+  );
+}
 
   const pieData = (key) => {
     const total = data.reduce((sum, item) => sum + item[key], 0);
