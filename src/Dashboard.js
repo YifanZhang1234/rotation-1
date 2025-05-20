@@ -1,5 +1,9 @@
-import React, { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+
+import React, { useState, useEffect } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  PieChart, Pie, Cell, Legend, ResponsiveContainer
+} from "recharts";
 
 const rawCounts = [
   { type: "Individual", count: 14192 },
@@ -25,95 +29,117 @@ const rawAverages = [
   { type: "Super Fund", average: 82559.09 }
 ];
 
+const COLORS = ["#1f77b4", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd"];
+
 export default function Dashboard() {
   const [filter, setFilter] = useState("All");
+  const [chartType, setChartType] = useState("bar");
+  const [loading, setLoading] = useState(true);
+  const [counts, setCounts] = useState(rawCounts);
 
-  const filteredCounts = filter === "All" ? rawCounts : rawCounts.filter(d => d.type === filter);
+  useEffect(() => {
+    setTimeout(() => setLoading(false), 1000);
+  }, []);
+
+  const filteredCounts = filter === "All" ? counts : counts.filter(d => d.type === filter);
   const filteredTotals = filter === "All" ? rawTotals : rawTotals.filter(d => d.type === filter);
   const filteredAverages = filter === "All" ? rawAverages : rawAverages.filter(d => d.type === filter);
 
-  const handleExport = () => {
-    const csv = ["Type,Count,Income,Average"];
-    rawCounts.forEach((c, i) => {
-      const t = rawTotals[i]?.income || 0;
-      const a = rawAverages[i]?.average || 0;
-      csv.push(`${c.type},${c.count},${t},${a}`);
-    });
-    const blob = new Blob([csv.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "serr-data.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  const offsetMap = {
+    "Super Fund": chartIndex => chartIndex === 2 ? -60 : -15,
+    "Partnership": chartIndex => chartIndex === 2 ? -30 : -15,
+    "Trust": chartIndex => chartIndex === 2 ? -10 : 0,
+    "Company": () => 0,
+    "Individual": () => 0
+  };
+
+  const renderLabel = (entry, index, chartIndex, key) => {
+    const RADIAN = Math.PI / 180;
+    const radius = 110;
+    const cx = 200;
+    const cy = 150;
+    const angle = entry.midAngle;
+    const offset = offsetMap[entry.name]?.(chartIndex) || 0;
+    const x = cx + (radius + 30) * Math.cos(-angle * RADIAN);
+    const y = cy + (radius + 30) * Math.sin(-angle * RADIAN) + offset;
+    const value = key === "count" ? entry.count :
+                  key === "income" ? `$${entry.income.toLocaleString()}` :
+                  `$${entry.average.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+    const percent = `${(entry.percent * 100).toFixed(1)}%`;
+
+    return (
+      <text x={x} y={y} fill="#000" fontSize="12px" textAnchor="middle" dominantBaseline="central">
+        {`${entry.name}: ${percent} (${value})`}
+      </text>
+    );
+  };
+
+  const renderChart = (data, key, chartIndex) => chartType === "bar" ? (
+    <ResponsiveContainer width="100%" height={350}>
+      <BarChart data={data}>
+        <XAxis dataKey="type" />
+        <YAxis />
+        <Tooltip />
+        <Legend />
+        <Bar dataKey={key} fill={COLORS[chartIndex % COLORS.length]} />
+      </BarChart>
+    </ResponsiveContainer>
+  ) : (
+    <ResponsiveContainer width="100%" height={350}>
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey={key}
+          nameKey="type"
+          cx={200}
+          cy={150}
+          outerRadius={100}
+          label={(entry, index) => renderLabel(entry, index, chartIndex, key)}
+        >
+          {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+        </Pie>
+        <Tooltip />
+        <Legend />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+
+  const handleUpload = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      const lines = reader.result.split("\n").slice(1);
+      const parsed = lines.map(line => {
+        const [type, count] = line.split(",");
+        return { type, count: parseInt(count) };
+      }).filter(d => d.type);
+      setCounts(parsed);
+    };
+    if (file) reader.readAsText(file);
   };
 
   return (
-    <div className="p-4 space-y-8">
-      <h1 className="text-3xl font-bold text-blue-800">SERR Lodgement Dashboard (2024 FY)</h1>
-
-      <p className="text-gray-600 text-base">This dashboard shows clients with unlodged SERR income for the 2024 financial year. Data is grouped by client type and summarised by count, total income, and average income per client.</p>
-
-      <div className="flex items-center gap-4 mt-4">
-        <label className="text-sm">Filter by Client Type:</label>
-        <select
-          className="border p-1 rounded"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          <option value="All">All</option>
-          {rawCounts.map(d => (
-            <option key={d.type} value={d.type}>{d.type}</option>
-          ))}
-        </select>
-
-        <button
-          onClick={handleExport}
-          className="ml-auto bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-        >
-          Export CSV
-        </button>
-      </div>
-
-      <div className="bg-white p-4 rounded-2xl shadow">
-        <h2 className="text-xl font-semibold mb-2">1. Unlodged Client Count by Type</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={filteredCounts}>
-            <XAxis dataKey="type" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="count" fill="#8884d8" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="bg-white p-4 rounded-2xl shadow">
-        <h2 className="text-xl font-semibold mb-2">2. Total Unlodged SERR Income</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={filteredTotals}>
-            <XAxis dataKey="type" />
-            <YAxis />
-            <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
-            <Bar dataKey="income" fill="#82ca9d" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="bg-white p-4 rounded-2xl shadow">
-        <h2 className="text-xl font-semibold mb-2">3. Average SERR Income per Client</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={filteredAverages}>
-            <XAxis dataKey="type" />
-            <YAxis />
-            <Tooltip formatter={(value) => `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
-            <Bar dataKey="average" fill="#ffc658" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <footer className="text-center text-sm text-gray-500 pt-10">
-        Created by Yifan Zhang, 2025
-      </footer>
+    <div style={{ fontFamily: "sans-serif", textAlign: "center", backgroundColor: "#f4faff", minHeight: "100vh", padding: "2rem" }}>
+      {loading ? <h2 style={{ color: "#1f77b4" }}>Loading...</h2> : <>
+        <h1 style={{ color: "#1f77b4" }}>SERR Dashboard</h1>
+        <div style={{ marginBottom: "1rem" }}>
+          <select value={filter} onChange={e => setFilter(e.target.value)} style={{ marginRight: "1rem" }}>
+            <option value="All">All</option>
+            {counts.map(d => <option key={d.type}>{d.type}</option>)}
+          </select>
+          <button onClick={() => setChartType(chartType === "bar" ? "pie" : "bar")} style={{ marginRight: "1rem" }}>
+            Switch to {chartType === "bar" ? "Pie" : "Bar"} Chart
+          </button>
+          <input type="file" accept=".csv" onChange={handleUpload} />
+        </div>
+        <h2>1. Unlodged Count</h2>
+        {renderChart(filteredCounts, "count", 0)}
+        <h2>2. Total SERR Income</h2>
+        {renderChart(filteredTotals, "income", 1)}
+        <h2>3. Average Income per Client</h2>
+        {renderChart(filteredAverages, "average", 2)}
+        <footer style={{ marginTop: "3rem", color: "#1f77b4" }}>Created by Yifan Zhang, 2025</footer>
+      </>}
     </div>
   );
 }
