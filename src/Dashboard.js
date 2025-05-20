@@ -44,8 +44,8 @@ const Dashboard = () => {
     const cy = 150;
     const angle = entry.midAngle;
     const offset = labelAdjust[entry.name] || 0;
-    const x = cx + (radius + 30) * Math.cos(-angle * RADIAN);
-    const y = cy + (radius + 30) * Math.sin(-angle * RADIAN) + offset;
+    const x = cx + (radius + 15) * Math.cos(-angle * RADIAN);
+    const y = cy + (radius + 15) * Math.sin(-angle * RADIAN) + offset;
 
     return (
       <text x={x} y={y} fill="#000" fontSize="12px" textAnchor="middle" dominantBaseline="central">
