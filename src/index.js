@@ -1,4 +1,7 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
-import App from './Dashboard';
-ReactDOM.render(<App />, document.getElementById('root'));
+import React from "react";
+import { createRoot } from "react-dom/client";
+import Dashboard from "./Dashboard";
+
+const container = document.getElementById("root");
+const root = createRoot(container);
+root.render(<Dashboard />);
