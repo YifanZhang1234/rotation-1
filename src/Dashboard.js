@@ -1,145 +1,112 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Cell, Legend, ResponsiveContainer
+  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer
 } from "recharts";
-
-const rawCounts = [
-  { type: "Individual", count: 14192 },
-  { type: "Company", count: 952 },
-  { type: "Trust", count: 183 },
-  { type: "Partnership", count: 87 },
-  { type: "Super Fund", count: 7 }
-];
-
-const rawTotals = [
-  { type: "Individual", income: 3827393000 },
-  { type: "Company", income: 605185700 },
-  { type: "Trust", income: 123600700 },
-  { type: "Partnership", income: 29481070 },
-  { type: "Super Fund", income: 577913.6 }
-];
-
-const rawAverages = [
-  { type: "Trust", average: 675413.62 },
-  { type: "Company", average: 635699.30 },
-  { type: "Partnership", average: 338862.88 },
-  { type: "Individual", average: 269686.63 },
-  { type: "Super Fund", average: 82559.09 }
-];
+import * as XLSX from "xlsx";
 
 const COLORS = ["#1f77b4", "#2ca02c", "#ff7f0e", "#d62728", "#9467bd"];
+const TYPES = ["Individual", "Company", "Trust", "Partnership", "Super Fund"];
 
-export default function Dashboard() {
-  const [filter, setFilter] = useState("All");
-  const [chartType, setChartType] = useState("bar");
+const initialData = [
+  { type: "Individual", count: 14192, total: 3827393000 },
+  { type: "Company", count: 952, total: 605185700 },
+  { type: "Trust", count: 183, total: 123600700 },
+  { type: "Partnership", count: 87, total: 33886300 },
+  { type: "Super Fund", count: 7, total: 8255900 }
+];
+
+const Dashboard = () => {
+  const [data, setData] = useState(initialData);
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState(rawCounts);
+  const [viewType, setViewType] = useState("pie");
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 1000);
+    setTimeout(() => setLoading(false), 800); // Loading 动效
   }, []);
 
-  const filteredCounts = filter === "All" ? counts : counts.filter(d => d.type === filter);
-  const filteredTotals = filter === "All" ? rawTotals : rawTotals.filter(d => d.type === filter);
-  const filteredAverages = filter === "All" ? rawAverages : rawAverages.filter(d => d.type === filter);
-
-  const offsetMap = {
-    "Super Fund": chartIndex => chartIndex === 2 ? -60 : -15,
-    "Partnership": chartIndex => chartIndex === 2 ? -30 : -15,
-    "Trust": chartIndex => chartIndex === 2 ? -10 : 0,
-    "Company": () => 0,
-    "Individual": () => 0
+  const pieData = (key) => {
+    const total = data.reduce((sum, item) => sum + item[key], 0);
+    return data.map((item) => ({
+      name: item.type,
+      value: item[key],
+      percent: ((item[key] / total) * 100).toFixed(1),
+      raw: item[key]
+    }));
   };
 
-  const renderLabel = (entry, index, chartIndex, key) => {
-    const RADIAN = Math.PI / 180;
-    const radius = 110;
-    const cx = 200;
-    const cy = 150;
-    const angle = entry.midAngle;
-    const offset = offsetMap[entry.name]?.(chartIndex) || 0;
-    const x = cx + (radius + 30) * Math.cos(-angle * RADIAN);
-    const y = cy + (radius + 30) * Math.sin(-angle * RADIAN) + offset;
-    const value = key === "count" ? entry.count :
-                  key === "income" ? `$${entry.income.toLocaleString()}` :
-                  `$${entry.average.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-    const percent = `${(entry.percent * 100).toFixed(1)}%`;
+  const renderLabel = (entry) =>
+    `${entry.name}: ${entry.percent}% ($${entry.raw.toLocaleString()})`;
 
-    return (
-      <text x={x} y={y} fill="#000" fontSize="12px" textAnchor="middle" dominantBaseline="central">
-        {`${entry.name}: ${percent} (${value})`}
-      </text>
-    );
+  const handleExport = () => {
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    XLSX.writeFile(wb, "serr8_export.xlsx");
   };
 
-  const renderChart = (data, key, chartIndex) => chartType === "bar" ? (
-    <ResponsiveContainer width="100%" height={350}>
-      <BarChart data={data}>
-        <XAxis dataKey="type" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Bar dataKey={key} fill={COLORS[chartIndex % COLORS.length]} />
-      </BarChart>
-    </ResponsiveContainer>
-  ) : (
-    <ResponsiveContainer width="100%" height={350}>
-      <PieChart>
-        <Pie
-          data={data}
-          dataKey={key}
-          nameKey="type"
-          cx={200}
-          cy={150}
-          outerRadius={100}
-          label={(entry, index) => renderLabel(entry, index, chartIndex, key)}
-        >
-          {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-        </Pie>
-        <Tooltip />
-        <Legend />
-      </PieChart>
-    </ResponsiveContainer>
-  );
-
-  const handleUpload = e => {
+  const handleImport = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const lines = reader.result.split("\n").slice(1);
-      const parsed = lines.map(line => {
-        const [type, count] = line.split(",");
-        return { type, count: parseInt(count) };
-      }).filter(d => d.type);
-      setCounts(parsed);
+    reader.onload = (evt) => {
+      const bstr = evt.target.result;
+      const wb = XLSX.read(bstr, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const parsed = XLSX.utils.sheet_to_json(ws);
+      setData(parsed);
     };
-    if (file) reader.readAsText(file);
+    reader.readAsBinaryString(file);
   };
 
-  return (
-    <div style={{ fontFamily: "sans-serif", textAlign: "center", backgroundColor: "#f4faff", minHeight: "100vh", padding: "2rem" }}>
-      {loading ? <h2 style={{ color: "#1f77b4" }}>Loading...</h2> : <>
-        <h1 style={{ color: "#1f77b4" }}>SERR Dashboard</h1>
-        <div style={{ marginBottom: "1rem" }}>
-          <select value={filter} onChange={e => setFilter(e.target.value)} style={{ marginRight: "1rem" }}>
-            <option value="All">All</option>
-            {counts.map(d => <option key={d.type}>{d.type}</option>)}
-          </select>
-          <button onClick={() => setChartType(chartType === "bar" ? "pie" : "bar")} style={{ marginRight: "1rem" }}>
-            Switch to {chartType === "bar" ? "Pie" : "Bar"} Chart
-          </button>
-          <input type="file" accept=".csv" onChange={handleUpload} />
-        </div>
-        <h2>1. Unlodged Count</h2>
-        {renderChart(filteredCounts, "count", 0)}
-        <h2>2. Total SERR Income</h2>
-        {renderChart(filteredTotals, "income", 1)}
-        <h2>3. Average Income per Client</h2>
-        {renderChart(filteredAverages, "average", 2)}
-        <footer style={{ marginTop: "3rem", color: "#1f77b4" }}>Created by Yifan Zhang, 2025</footer>
-      </>}
+  const chartBlock = (title, key, chartIndex) => (
+    <div style={{ textAlign: "center", margin: "20px" }}>
+      <h3 style={{ textAlign: "left", marginLeft: 20 }}>{title}</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        {viewType === "pie" ? (
+          <PieChart>
+            <Pie
+              data={pieData(key)}
+              cx="50%"
+              cy="50%"
+              label={renderLabel}
+              outerRadius={100}
+              dataKey="value"
+            >
+              {pieData(key).map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+          </PieChart>
+        ) : (
+          <BarChart data={pieData(key)}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="value" fill="#1f77b4" />
+          </BarChart>
+        )}
+      </ResponsiveContainer>
     </div>
   );
-}
+
+  if (loading) return <div style={{ textAlign: "center", padding: 40 }}>Loading...</div>;
+
+  return (
+    <div style={{ backgroundColor: "#f2f8fc", padding: "20px", fontFamily: "Arial" }}>
+      <div style={{ marginBottom: 20 }}>
+        <button onClick={() => setViewType(viewType === "pie" ? "bar" : "pie")}>
+          Toggle Chart View
+        </button>
+        <input type="file" accept=".xlsx, .xls" onChange={handleImport} style={{ marginLeft: 10 }} />
+        <button onClick={handleExport} style={{ marginLeft: 10 }}>Export Excel</button>
+      </div>
+      {chartBlock("1. Unlodged Client Count by Type", "count", 1)}
+      {chartBlock("2. Total Unlodged SERR Income", "total", 2)}
+      {chartBlock("3. Average Income per Client", "average", 3)}
+    </div>
+  );
+};
+
+export default Dashboard;
